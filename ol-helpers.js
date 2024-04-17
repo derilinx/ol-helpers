@@ -385,236 +385,239 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
         });
     }
 
-    OL_HELPERS.LoggingMap = function(options) {
-        ol.Map.call(this, options);
+    class LoggingMap extends ol.Map {
+        constructor(options) {
+            super(options);
 
-        this.loadingObjects = []
+            this.loadingObjects = []
 
-        this.errorDiv = options.errorDiv
-        if (this.errorDiv === undefined) {
-            this.errorDiv = $("<div style='color: #511e17; font-size: 12px; padding: 2px 3px; background-color: rgba(255, 235, 131, 0.80);  display: none;'></div>")[0]
-        }
+            this.errorDiv = options.errorDiv
+            if (this.errorDiv === undefined) {
+                this.errorDiv = $("<div style='color: #511e17; font-size: 12px; padding: 2px 3px; background-color: rgba(255, 235, 131, 0.80);  display: none;'></div>")[0]
+            }
 
-        this.msgDiv = options.msgDiv
-        if (this.msgDiv === undefined) {
-            this.msgDiv = $("<div style='font-size: 12px; padding: 2px 3px; background-color: rgba(255,255,255,0.8); display: none;'></div>")[0]
-        }
+            this.msgDiv = options.msgDiv
+            if (this.msgDiv === undefined) {
+                this.msgDiv = $("<div style='font-size: 12px; padding: 2px 3px; background-color: rgba(255,255,255,0.8); display: none;'></div>")[0]
+            }
 
-        this.loadingDiv = options.loadingDiv
-        if (this.loadingDiv === undefined) {
-            this.loadingDiv = $("<div class='loader' style='font-size: 10px; margin: 40px 40px; z-index: 50; position: absolute; top: 0px;'></div>")[0]
-        }
-        this.loadingListener = options.loadingListener
+            this.loadingDiv = options.loadingDiv
+            if (this.loadingDiv === undefined) {
+                this.loadingDiv = $("<div class='loader' style='font-size: 10px; margin: 40px 40px; z-index: 50; position: absolute; top: 0px;'></div>")[0]
+            }
+            this.loadingListener = options.loadingListener
 
-        this.loadingDiv && this.getViewport().appendChild(this.loadingDiv);
+            this.loadingDiv && this.getViewport().appendChild(this.loadingDiv);
 
-        var msgContainer = $("<div style='position: absolute; z-index: 50; left: 60px; top:10px;'></div>").appendTo(this.getViewport());
-        this.errorDiv && msgContainer.append(this.errorDiv);
-        this.msgDiv && msgContainer.append(this.msgDiv);
+            var msgContainer = $("<div style='position: absolute; z-index: 50; left: 60px; top:10px;'></div>").appendTo(this.getViewport());
+            this.errorDiv && msgContainer.append(this.errorDiv);
+            this.msgDiv && msgContainer.append(this.msgDiv);
 
-        this.partiallyLoadedSources = [];
-        this.erroredSources = [];
+            this.partiallyLoadedSources = [];
+            this.erroredSources = [];
 
-        this.on("change:partiallyLoaded", function() {
-            if (this.msgDiv) {
-                if (this.partiallyLoadedSources.length > 0) {
-                    var _thisMap = this;
-                    var msgDiv = $(this.msgDiv)
-                        .text("More features to load ")
-                        .append($("<button>Reload in current view</button>").click(function() {
-                            _thisMap.partiallyLoadedSources.forEach(function(src) {
-                                src.clear();
-                            })
-                        }))
-                    _thisMap.partiallyLoadedSources.forEach(function(src) {
-                        if (src.get('next_page')) {
-                            msgDiv.append($("<button>Next page</button>").click(function() {
+            this.on("change:partiallyLoaded", function() {
+                if (this.msgDiv) {
+                    if (this.partiallyLoadedSources.length > 0) {
+                        var _thisMap = this;
+                        var msgDiv = $(this.msgDiv)
+                            .text("More features to load ")
+                            .append($("<button>Reload in current view</button>").click(function() {
                                 _thisMap.partiallyLoadedSources.forEach(function(src) {
-                                    src.nextPage();
+                                    src.clear();
                                 })
                             }))
-                        }
-                    })
-                    this.msgDiv.style.display = '';
+                        _thisMap.partiallyLoadedSources.forEach(function(src) {
+                            if (src.get('next_page')) {
+                                msgDiv.append($("<button>Next page</button>").click(function() {
+                                    _thisMap.partiallyLoadedSources.forEach(function(src) {
+                                        src.nextPage();
+                                    })
+                                }))
+                            }
+                        })
+                        this.msgDiv.style.display = '';
+                    } else {
+                        this.msgDiv.style.display = 'none';
+                    }
+                }
+            });
+
+            this.on("change:erroredSource", _.bind(this.updateErrorStatus, this));
+            this.on("change:errors", _.bind(this.updateErrorStatus, this));
+
+            this.updateLoadingStatus();
+        };
+
+
+        logError(err) {
+            if (!this.get('errors')) {
+                this.set('errors', [err]);
+            } else {
+                this.get('errors').push(err);
+                this.dispatchEvent("change:errors");
+            }
+        }
+
+        updateErrorStatus() {
+            if (this.errorDiv) {
+                var errors = this.get('errors');
+                var hasErrors = errors && errors.length > 0;
+
+                $(this.errorDiv).empty();
+
+                if (this.erroredSources.length <= 0 && !hasErrors) {
+                    this.errorDiv.style.display = 'none';
+                }
+                else {
+                    this.errorDiv.style.display = '';
+
+                    if (this.erroredSources.length > 0) {
+                        var _thisMap = this;
+                        $(this.errorDiv)
+                            .text("Layers in error - See console for details ")
+                            .append($("<button>Retry</button>").click(function() {
+                                _thisMap.erroredSources.forEach(function(src) {
+                                    src.setState(ol.source.State.READY);
+                                    src.clear();
+                                })
+                            }))
+                    }
+                    else if (hasErrors) {
+                        var _this = this;
+                        errors.forEach(function(err) {
+                            $(_this.errorDiv).append($("<div></div>").text(err))
+                        })
+                    }
+                }
+            }
+        };
+
+        updateLoadingStatus() {
+            if (this.loadingObjects.length == 0) {
+                this.loadingDiv && (this.loadingDiv.style.display = 'none');
+                this.loadingListener && this.loadingListener(false);
+            } else {
+                this.loadingDiv && (this.loadingDiv.style.display = '');
+                this.loadingListener && this.loadingListener(true);
+            }
+        };
+
+        addLayer(layer) {
+            // UNDONE ??
+            super.addLayer.apply(this, arguments)
+
+            var _this = this
+
+            var layerStarts = function(event) {
+                var loadingObj = event.tile || event.target || layer.getSource();
+
+                if (event.tile) {
+                    layer.getSource().loadingTiles = layer.getSource().loadingTiles || [];
+                    layer.getSource().loadingTiles.push(event.tile);
+                }
+
+                if (layer.getSource().get('HL_state') != ol.source.State.LOADING)
+                    layer.getSource().set('HL_state', ol.source.State.LOADING);
+
+                if (_this.loadingObjects.indexOf(loadingObj) < 0) {
+                    _this.loadingObjects.push(loadingObj)
+                }
+                _this.updateLoadingStatus();
+            }
+
+            var layerEnds = function(event) {
+                var loadingObj = event.tile || event.target || layer.getSource();
+
+                if (event.tile && layer.getSource().loadingTiles) {
+                    var tileIdx = layer.getSource().loadingTiles.indexOf(event.tile);
+                    tileIdx >= 0 && layer.getSource().loadingTiles.splice(tileIdx, 1);
+                }
+
+                if (!layer.getSource().loadingTiles || layer.getSource().loadingTiles.length == 0) {
+                    if (layer.getSource().get('HL_state') != ol.source.State.READY)
+                        layer.getSource().set('HL_state', ol.source.State.READY);
+                }
+
+                var es_idx = _this.erroredSources.indexOf(loadingObj);
+                if (this.getState() == ol.source.State.ERROR) {
+                    if (es_idx == -1)
+                        _this.erroredSources.push(loadingObj);
+                    _this.dispatchEvent("change:erroredSource");
                 } else {
-                    this.msgDiv.style.display = 'none';
+                    if (es_idx >= 0) {
+                        _this.erroredSources.splice(es_idx, 1);
+                        _this.dispatchEvent("change:erroredSource")
+                    }
                 }
-            }
-        });
 
-        this.on("change:erroredSource", _.bind(this.updateErrorStatus, this));
-        this.on("change:errors", _.bind(this.updateErrorStatus, this));
-
-        this.updateLoadingStatus();
-    };
-    ol.inherits(OL_HELPERS.LoggingMap, ol.Map);
-
-    OL_HELPERS.LoggingMap.prototype.logError = function(err) {
-        if (!this.get('errors')) {
-            this.set('errors', [err]);
-        } else {
-            this.get('errors').push(err);
-            this.dispatchEvent("change:errors");
-        }
-    }
-
-    OL_HELPERS.LoggingMap.prototype.updateErrorStatus = function() {
-        if (this.errorDiv) {
-            var errors = this.get('errors');
-            var hasErrors = errors && errors.length > 0;
-
-            $(this.errorDiv).empty();
-
-            if (this.erroredSources.length <= 0 && !hasErrors) {
-                this.errorDiv.style.display = 'none';
-            }
-            else {
-                this.errorDiv.style.display = '';
-
-                if (this.erroredSources.length > 0) {
-                    var _thisMap = this;
-                    $(this.errorDiv)
-                        .text("Layers in error - See console for details ")
-                        .append($("<button>Retry</button>").click(function() {
-                            _thisMap.erroredSources.forEach(function(src) {
-                                src.setState(ol.source.State.READY);
-                                src.clear();
-                            })
-                        }))
+                var pls_idx = _this.partiallyLoadedSources.indexOf(loadingObj);
+                if (loadingObj.get && loadingObj.get('partial_load')) {
+                    if (pls_idx == -1) {
+                        _this.partiallyLoadedSources.push(loadingObj);
+                        _this.dispatchEvent("change:partiallyLoaded");
+                    }
+                } else {
+                    if (pls_idx >= 0) {
+                        _this.partiallyLoadedSources.splice(pls_idx, 1);
+                        _this.dispatchEvent("change:partiallyLoaded")
+                    }
                 }
-                else if (hasErrors) {
-                    var _this = this;
-                    errors.forEach(function(err) {
-                        $(_this.errorDiv).append($("<div></div>").text(err))
-                    })
+
+                var idx = _this.loadingObjects.indexOf(loadingObj)
+                if (idx >= 0) {
+                    _this.loadingObjects.splice(idx, 1)
                 }
-            }
-        }
-    };
-
-    OL_HELPERS.LoggingMap.prototype.updateLoadingStatus = function() {
-        if (this.loadingObjects.length == 0) {
-            this.loadingDiv && (this.loadingDiv.style.display = 'none');
-            this.loadingListener && this.loadingListener(false);
-        } else {
-            this.loadingDiv && (this.loadingDiv.style.display = '');
-            this.loadingListener && this.loadingListener(true);
-        }
-    };
-
-    OL_HELPERS.LoggingMap.prototype.addLayer = function(layer) {
-        ol.Map.prototype.addLayer.apply(this, arguments)
-
-        var _this = this
-
-        var layerStarts = function(event) {
-            var loadingObj = event.tile || event.target || layer.getSource();
-
-            if (event.tile) {
-                layer.getSource().loadingTiles = layer.getSource().loadingTiles || [];
-                layer.getSource().loadingTiles.push(event.tile);
+                setTimeout(function() {
+                    _this.updateLoadingStatus()
+                }, 100);
             }
 
-            if (layer.getSource().get('HL_state') != ol.source.State.LOADING)
-                layer.getSource().set('HL_state', ol.source.State.LOADING);
+            //TODO do something special for errors ?
+            var layerError = layerEnds
 
-            if (_this.loadingObjects.indexOf(loadingObj) < 0) {
-                _this.loadingObjects.push(loadingObj)
-            }
-            _this.updateLoadingStatus();
-        }
-
-        var layerEnds = function(event) {
-            var loadingObj = event.tile || event.target || layer.getSource();
-
-            if (event.tile && layer.getSource().loadingTiles) {
-                var tileIdx = layer.getSource().loadingTiles.indexOf(event.tile);
-                tileIdx >= 0 && layer.getSource().loadingTiles.splice(tileIdx, 1);
-            }
-
-            if (!layer.getSource().loadingTiles || layer.getSource().loadingTiles.length == 0) {
-                if (layer.getSource().get('HL_state') != ol.source.State.READY)
-                    layer.getSource().set('HL_state', ol.source.State.READY);
-            }
-
-            var es_idx = _this.erroredSources.indexOf(loadingObj);
-            if (this.getState() == ol.source.State.ERROR) {
-                if (es_idx == -1)
-                    _this.erroredSources.push(loadingObj);
-                _this.dispatchEvent("change:erroredSource");
-            } else {
-                if (es_idx >= 0) {
-                    _this.erroredSources.splice(es_idx, 1);
-                    _this.dispatchEvent("change:erroredSource")
+            layer.getSource().on('change', function(e) {
+                if (layer.getSource().getState() == ol.source.State.LOADING) {
+                    layerStarts.call(this, e)
+                } else if (layer.getSource().getState() == ol.source.State.READY)
+                {
+                    layerEnds.call(this, e)
+                } else if (layer.getSource().getState() == ol.source.State.ERROR)
+                {
+                    layerError.call(this, e)
                 }
-            }
+            });
 
-            var pls_idx = _this.partiallyLoadedSources.indexOf(loadingObj);
-            if (loadingObj.get && loadingObj.get('partial_load')) {
-                if (pls_idx == -1) {
-                    _this.partiallyLoadedSources.push(loadingObj);
+            layer.on('change:visible', function(e) {
+                var pls_idx = _this.partiallyLoadedSources.indexOf(this.getSource());
+                if (this.getVisible() && this.getSource().get('partial_load')) {
+                    _this.partiallyLoadedSources.push(this.getSource());
                     _this.dispatchEvent("change:partiallyLoaded");
-                }
-            } else {
-                if (pls_idx >= 0) {
+                } else if (!this.getVisible() && pls_idx >= 0) {
                     _this.partiallyLoadedSources.splice(pls_idx, 1);
                     _this.dispatchEvent("change:partiallyLoaded")
                 }
-            }
 
-            var idx = _this.loadingObjects.indexOf(loadingObj)
-            if (idx >= 0) {
-                _this.loadingObjects.splice(idx, 1)
-            }
-            setTimeout(function() {
-                _this.updateLoadingStatus()
-            }, 100);
-        }
+                var es_idx = _this.erroredSources.indexOf(this.getSource());
+                if (this.getVisible() && this.getSource().getState() == ol.source.State.ERROR) {
+                    _this.erroredSources.push(this.getSource());
+                    _this.dispatchEvent("change:erroredSource");
+                } else if (!this.getVisible() && es_idx >= 0) {
+                    _this.erroredSources.splice(es_idx, 1);
+                    _this.dispatchEvent("change:erroredSource")
+                }
+            });
 
-        //TODO do something special for errors ?
-        var layerError = layerEnds
+            layer.getSource().on('tileloadstart', layerStarts);
+            layer.getSource().on('tileloadend', layerEnds);
+            layer.getSource().on('tileloaderror', layerError);
+            layer.getSource().on('imageloadstart', layerStarts);
+            layer.getSource().on('imageloadend', layerEnds);
+            layer.getSource().on('imageloaderror', layerError);
 
-        layer.getSource().on('change', function(e) {
-            if (layer.getSource().getState() == ol.source.State.LOADING) {
-                layerStarts.call(this, e)
-            } else if (layer.getSource().getState() == ol.source.State.READY)
-            {
-                layerEnds.call(this, e)
-            } else if (layer.getSource().getState() == ol.source.State.ERROR)
-            {
-                layerError.call(this, e)
-            }
-        });
-
-        layer.on('change:visible', function(e) {
-            var pls_idx = _this.partiallyLoadedSources.indexOf(this.getSource());
-            if (this.getVisible() && this.getSource().get('partial_load')) {
-                _this.partiallyLoadedSources.push(this.getSource());
-                _this.dispatchEvent("change:partiallyLoaded");
-            } else if (!this.getVisible() && pls_idx >= 0) {
-                _this.partiallyLoadedSources.splice(pls_idx, 1);
-                _this.dispatchEvent("change:partiallyLoaded")
-            }
-
-            var es_idx = _this.erroredSources.indexOf(this.getSource());
-            if (this.getVisible() && this.getSource().getState() == ol.source.State.ERROR) {
-                _this.erroredSources.push(this.getSource());
-                _this.dispatchEvent("change:erroredSource");
-            } else if (!this.getVisible() && es_idx >= 0) {
-                _this.erroredSources.splice(es_idx, 1);
-                _this.dispatchEvent("change:erroredSource")
-            }
-        });
-
-        layer.getSource().on('tileloadstart', layerStarts);
-        layer.getSource().on('tileloadend', layerEnds);
-        layer.getSource().on('tileloaderror', layerError);
-        layer.getSource().on('imageloadstart', layerStarts);
-        layer.getSource().on('imageloadend', layerEnds);
-        layer.getSource().on('imageloaderror', layerError);
-
-    };
-
+        };
+    }
+    OL_HELPERS.LoggingMap = LoggingMap;
 
     /**
      * Options : {
@@ -626,40 +629,43 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
      * @param opt_options
      * @constructor
      */
-    OL_HELPERS.FeatureDetailsControl = function(opt_options) {
+    class FeatureDetailsControl extends ol.control.Control {
+        constructor(opt_options) {
+            super(opt_options);
 
-        var options = opt_options ? opt_options : {};
+            var options = opt_options ? opt_options : {};
 
-        var element = document.createElement('DIV');
-        element.className = options.className !== undefined ? options.className : 'ol-feature-details';
+            var element = document.createElement('DIV');
+            element.className = options.className !== undefined ? options.className : 'ol-feature-details';
 
-        var render = options.render ?
-            options.render : OL_HELPERS.FeatureDetailsControl.render;
+            var render = options.render ?
+                options.render : OL_HELPERS.FeatureDetailsControl.render;
 
-        ol.control.Control.call(this, {
-            element: element,
-            render: render,
-            target: options.target
-        });
+            ol.control.Control.call(this, {
+                element: element,
+                render: render,
+                target: options.target
+            });
 
-        this.renderFeature = options.renderFeature ?
-            options.renderFeature : OL_HELPERS.FeatureDetailsControl.renderFeature;
+            this.renderFeature = options.renderFeature ?
+                options.renderFeature : OL_HELPERS.FeatureDetailsControl.renderFeature;
 
 
-        this.on('change:'+OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES, this.handleFeaturesChanged);
+            this.on('change:'+OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES, this.handleFeaturesChanged);
 
-    };
-    ol.inherits(OL_HELPERS.FeatureDetailsControl, ol.control.Control);
+        };
 
-    OL_HELPERS.FeatureDetailsControl.prototype.handleFeaturesChanged = function() {
-        this.render();
-    };
+        handleFeaturesChanged() {
+            this.render();
+        };
 
-    OL_HELPERS.FeatureDetailsControl.prototype.setFeatures = function(features) {
-        if (features instanceof ol.Collection)
-            features = features.getArray();
-        this.set(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES, features || []);
-    };
+        setFeatures(features) {
+            if (features instanceof ol.Collection)
+                features = features.getArray();
+            this.set(OL_HELPERS.FeatureDetailsControl.PROPERTIES.SELECTED_FEATURES, features || []);
+        };
+    }
+    OL_HELPERS.FeatureDetailsControl = FeatureDetailsControl;;
 
     /**
      * Update the mouseposition element.
@@ -724,122 +730,123 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
     };
 
 
-    OL_HELPERS.FeatureInfoOverlay = function(options) {
-        ol.Overlay.call(this, options);
+    class FeatureInfoOverlay extends ol.Overlay {
+        constructor(options) {
+            super(options);
 
-        var popupContent = $(this.getElement()).find('.popupContent');
-        popupContent.hover(function() {
-            popupContent.prop('isHovered', true)
-        }, function() {
-            popupContent.prop('isHovered', false)
-        })
+            var popupContent = $(this.getElement()).find('.popupContent');
+            popupContent.hover(function() {
+                popupContent.prop('isHovered', true)
+            }, function() {
+                popupContent.prop('isHovered', false)
+            })
 
-        this.showDetails = options.showDetails;
-        this.filter = options.filter;
-        this.renderFeaturePopup = options.renderFeaturePopup || function(features, displayDetails) {
-            var htmlContent;
+            this.showDetails = options.showDetails;
+            this.filter = options.filter;
+            this.renderFeaturePopup = options.renderFeaturePopup || function(features, displayDetails) {
+                var htmlContent;
 
-            if (displayDetails) {
-                var feature = features[0];
+                if (displayDetails) {
+                    var feature = features[0];
 
-                var layerTitle = feature && feature.layer && feature.layer.get('title')
-                htmlContent = "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
-
-                htmlContent += "<table>";
-                feature.getKeys().forEach(function(prop) {
-                    htmlContent += "<tr><td class='propKey'>" + prop + "</td><td class='propValue'>" + feature.get(prop) + "</td></tr></div>"
-                })
-                htmlContent += "</table>"
-            } else {
-                htmlContent = "";
-                features.forEach(function(feature) {
                     var layerTitle = feature && feature.layer && feature.layer.get('title')
-                    htmlContent += "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
-                })
+                    htmlContent = "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
+
+                    htmlContent += "<table>";
+                    feature.getKeys().forEach(function(prop) {
+                        htmlContent += "<tr><td class='propKey'>" + prop + "</td><td class='propValue'>" + feature.get(prop) + "</td></tr></div>"
+                    })
+                    htmlContent += "</table>"
+                } else {
+                    htmlContent = "";
+                    features.forEach(function(feature) {
+                        var layerTitle = feature && feature.layer && feature.layer.get('title')
+                        htmlContent += "<div class='name'>" + layerTitle +" : <b>"+ (feature.get('name') || feature.getId()) + "</b></div>";
+                    })
+                }
+
+                return htmlContent;
+            }
+            this.computePosition = options.computePosition || function(features, evt) {
+                // default positioning : take current cursor pos
+                return evt.coordinate;
             }
 
-            return htmlContent;
-        }
-        this.computePosition = options.computePosition || function(features, evt) {
-            // default positioning : take current cursor pos
-            return evt.coordinate;
-        }
+            this.displayedFeatures = [];
 
-        this.displayedFeatures = [];
+            this.onDisplayedFeaturesChange = options.onDisplayedFeaturesChange;
 
-        this.onDisplayedFeaturesChange = options.onDisplayedFeaturesChange;
-
-        this.on('change:map', function(evt) {
-            this.HL_handleMapChanged();
-        })
-    };
-    ol.inherits(OL_HELPERS.FeatureInfoOverlay, ol.Overlay);
-
-    OL_HELPERS.FeatureInfoOverlay.prototype.setFeatures = function(features, displayDetails) {
-        if (this.onDisplayedFeaturesChange)
-            this.onDisplayedFeaturesChange(this.displayedFeatures, features);
-
-        this.displayedFeatures = features;
-
-        var popupContent = $(this.getElement()).find('.popupContent');
-
-        if (features.length == 0) {
-            // if features are no longer hovered, but info element still is, do not hide info
-            if (!popupContent.prop("isHovered"))
-                this.setPosition(undefined);
-            return;
+            this.on('change:map', function(evt) {
+                this.HL_handleMapChanged();
+            })
         }
 
-        var htmlContent = this.renderFeaturePopup(features, displayDetails);
+        setFeatures(features, displayDetails) {
+            if (this.onDisplayedFeaturesChange)
+                this.onDisplayedFeaturesChange(this.displayedFeatures, features);
 
-        // do a clean detach to make sure the same element can be re-appended while keeping its listeners
-        this.appendedElement && $(this.appendedElement).detach();
+            this.displayedFeatures = features;
 
-        if (typeof htmlContent === 'string') {
-            popupContent.html(htmlContent);
-        } else {
-            popupContent.empty().append(this.appendedElement = htmlContent);
+            var popupContent = $(this.getElement()).find('.popupContent');
+
+            if (features.length == 0) {
+                // if features are no longer hovered, but info element still is, do not hide info
+                if (!popupContent.prop("isHovered"))
+                    this.setPosition(undefined);
+                return;
+            }
+
+            var htmlContent = this.renderFeaturePopup(features, displayDetails);
+
+            // do a clean detach to make sure the same element can be re-appended while keeping its listeners
+            this.appendedElement && $(this.appendedElement).detach();
+
+            if (typeof htmlContent === 'string') {
+                popupContent.html(htmlContent);
+            } else {
+                popupContent.empty().append(this.appendedElement = htmlContent);
+            }
+
         }
 
-    }
+        HL_handleMapChanged() {
+            var map = this.getMap();
+            var _this = this;
+            if (map) {
+                map.on('pointermove', function(evt) {
 
-    OL_HELPERS.FeatureInfoOverlay.prototype.HL_handleMapChanged = function() {
-        var map = this.getMap();
-        var _this = this;
-        if (map) {
-            map.on('pointermove', function(evt) {
-
-                var changed = false;
-                var features = [];
-                map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
-                    if (layer != null) { // null layer is from unmanaged layers, presumably form Select interaction
-                        if (feature && (!_this.filter || _this.filter(feature, layer))) // sometimes feature is undefined (?!)
-                            features.push(feature);
-                        feature.layer = layer
-                        if (_this.displayedFeatures.indexOf(feature) < 0) {
-                            changed = true
+                    var changed = false;
+                    var features = [];
+                    map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
+                        if (layer != null) { // null layer is from unmanaged layers, presumably form Select interaction
+                            if (feature && (!_this.filter || _this.filter(feature, layer))) // sometimes feature is undefined (?!)
+                                features.push(feature);
+                            feature.layer = layer
+                            if (_this.displayedFeatures.indexOf(feature) < 0) {
+                                changed = true
+                            }
                         }
+                    });
+
+                    changed = !$_.isEqual(features, _this.displayedFeatures)
+
+                    if (changed) {
+                        if (_this.displayDetailsTimeout)
+                            clearTimeout(_this.displayDetailsTimeout)
+                        _this.setFeatures(features);
+                        if (_this.showDetails)
+                            _this.displayDetailsTimeout = setTimeout(function() {_this.setFeatures(_this.displayedFeatures, true);}, 500);
                     }
+
+                    if (_this.displayedFeatures.length > 0) {
+                        _this.setPosition(_this.computePosition(features, evt));
+                    }
+
                 });
-
-                changed = !$_.isEqual(features, _this.displayedFeatures)
-
-                if (changed) {
-                    if (_this.displayDetailsTimeout)
-                        clearTimeout(_this.displayDetailsTimeout)
-                    _this.setFeatures(features);
-                    if (_this.showDetails)
-                        _this.displayDetailsTimeout = setTimeout(function() {_this.setFeatures(_this.displayedFeatures, true);}, 500);
-                }
-
-                if (_this.displayedFeatures.length > 0) {
-                    _this.setPosition(_this.computePosition(features, evt));
-                }
-
-            });
+            }
         }
     };
-
+    OL_HELPERS.FeatureInfoOverlay = FeatureInfoOverlay;
 
 
 
@@ -1067,18 +1074,19 @@ ol.proj.addProjection(createEPSG4326Proj('EPSG:4326:LONLAT', 'enu'));
      *  to read global KML metadata (title, description, ...)      */
 
     OL_HELPERS.format = OL_HELPERS.format || {};
-    OL_HELPERS.format.KML = function(opt_options) {
+    class _KML extends ol.format.KML {
+        constructor (opt_options) {
+            super(opt_options);
+            this.onread = opt_options && opt_options.onread;
+        };
 
-        ol.format.KML.call(this, opt_options);
-        this.onread = opt_options && opt_options.onread;
-    };
-    ol.inherits(OL_HELPERS.format.KML, ol.format.KML);
-
-    OL_HELPERS.format.KML.prototype.readDocumentOrFolder_ = function(node, objectStack) {
-        var result = ol.format.KML.prototype.readDocumentOrFolder_.call(this, node, objectStack);
-        this.onread && this.onread(node);
-        return result;
-    };
+        readDocumentOrFolder_(node, objectStack) {
+            var result = super.readDocumentOrFolder_(node, objectStack);
+            this.onread && this.onread(node);
+            return result;
+        };
+    }
+    OL_HELPERS.format.KML = _KML;
 
     OL_HELPERS.createKMLLayer = function (url) {
 
